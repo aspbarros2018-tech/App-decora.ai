@@ -1,0 +1,51 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #c5a059;
+  --color-pmmg-blue: #0a192f;
+  --color-pmmg-gold: #c5a059;
+  --color-background-light: #f6f6f8;
+  --color-background-dark: #0a0e17;
+  --color-target-blue: #c5a059;
+  --color-target-check: #000000;
+  
+  --font-display: "Public Sans", sans-serif;
+}
+
+@layer base {
+  body {
+    font-family: 'Public Sans', sans-serif;
+    @apply bg-background-dark text-white antialiased;
+  }
+}
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+.icon-fill {
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+.rank-gradient {
+  background: linear-gradient(135deg, #1c2636 0%, #0a0e17 100%);
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 16px);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 16px);
+}
+
+@keyframes loading {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(0); }
+}
