@@ -134,8 +134,9 @@ const PdfPage = React.memo(function PdfPage({ pageNumber, scale, containerWidth,
   return (
     <div 
       id={`pdf-page-${pageNumber}`}
-      className="relative shadow-xl bg-white mb-8 mx-auto flex-shrink-0" 
+      className="relative shadow-xl bg-white mb-8 mx-auto flex-shrink-0 select-none" 
       ref={pageRef}
+      onContextMenu={(e) => e.preventDefault()}
       style={{ 
         width: pageWidth, 
         height: pageHeight,
@@ -210,16 +211,54 @@ export default function PdfReader() {
 
   const [pdfLoadError, setPdfLoadError] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<number>(0);
+  const [pdfBlob, setPdfBlob] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const fetchPdf = async () => {
+      if (!state?.pdfUrl) return;
+      
+      try {
+        setDownloadProgress(0);
+        setPdfLoadError(null);
+        
+        const proxyUrl = `/api/proxy-pdf?url=${encodeURIComponent(state.pdfUrl)}`;
+        const response = await fetch(proxyUrl);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(errorText || `Erro ${response.status}: Falha ao baixar o arquivo.`);
+        }
+        
+        // Simple blob fetch instead of reader for better compatibility
+        const blob = await response.blob();
+        if (!active) return;
+
+        const url = URL.createObjectURL(blob);
+        setPdfBlob(url);
+        setDownloadProgress(100);
+      } catch (err: any) {
+        if (!active) return;
+        console.error('Error fetching PDF:', err);
+        setPdfLoadError(err.message || 'Erro ao carregar o arquivo PDF.');
+      }
+    };
+
+    fetchPdf();
+    
+    return () => {
+      active = false;
+      if (pdfBlob) {
+        URL.revokeObjectURL(pdfBlob);
+      }
+    };
+  }, [state?.pdfUrl]);
 
   useEffect(() => {
     if (!state?.pdfUrl) {
       navigate('/materiais');
       return;
     }
-    
-    // Reset states when URL changes
-    setDownloadProgress(0);
-    setPdfLoadError(null);
   }, [state?.pdfUrl, navigate]);
 
   useEffect(() => {
@@ -410,44 +449,34 @@ export default function PdfReader() {
       <main className={`flex-1 flex flex-col w-full max-w-[480px] mx-auto bg-slate-200 relative overflow-y-auto ${isHighlightMode ? 'overflow-x-hidden' : 'overflow-x-auto'} pb-24`} ref={containerRef}>
         <div className={`flex flex-col p-4 min-h-full ${scale > 1 ? 'items-start' : 'items-center'}`}>
           {pdfLoadError ? (
-            <div className="flex flex-col items-center justify-center py-12 w-full text-center px-4">
-              <span className="material-symbols-outlined text-red-500 text-4xl mb-4">error</span>
-              <p className="text-slate-700 font-bold mb-2">Erro ao carregar PDF</p>
-              <p className="text-slate-500 text-sm">{pdfLoadError}</p>
-              <button 
-                onClick={() => window.location.reload()} 
-                className="mt-4 bg-pmmg-blue text-white px-4 py-2 rounded-lg text-sm font-bold"
-              >
-                Tentar Novamente
-              </button>
+            <div className="flex flex-col items-center justify-center py-12 w-full text-center px-4 bg-white rounded-2xl shadow-sm my-8">
+              <span className="material-symbols-outlined text-red-500 text-5xl mb-4">error</span>
+              <h3 className="text-slate-800 font-bold text-lg mb-2">Ops! Não conseguimos abrir o PDF</h3>
+              <p className="text-slate-500 text-sm mb-6 leading-relaxed max-w-xs mx-auto">
+                {pdfLoadError}
+              </p>
+              <div className="flex flex-col gap-3 w-full max-w-[240px]">
+                <button 
+                  onClick={() => window.location.reload()} 
+                  className="bg-pmmg-blue text-white px-6 py-3 rounded-xl text-sm font-bold shadow-lg shadow-pmmg-blue/20 active:scale-95 transition-transform"
+                >
+                  Tentar Novamente
+                </button>
+              </div>
             </div>
-          ) : containerWidth > 0 ? (
+          ) : containerWidth > 0 && pdfBlob ? (
             <Document
-              file={`/api/proxy-pdf?url=${encodeURIComponent(state.pdfUrl)}`}
+              file={pdfBlob}
               options={{ disableRange: true }}
               onLoadSuccess={onDocumentLoadSuccess}
               onLoadError={(error) => {
                 console.error('Error loading PDF:', error);
-                setPdfLoadError(error.message || 'Falha ao carregar o documento PDF.');
-              }}
-              onLoadProgress={({ loaded, total }) => {
-                if (total > 0) {
-                  setDownloadProgress(Math.round((loaded / total) * 100));
-                } else {
-                  setDownloadProgress(prev => Math.min(prev + 10, 90));
-                }
+                setPdfLoadError(error.message || 'Falha ao processar o documento PDF.');
               }}
               loading={
                 <div className="flex flex-col items-center justify-center py-12 w-full">
                   <div className="w-10 h-10 border-4 border-pmmg-blue/20 border-t-pmmg-blue rounded-full animate-spin mb-4"></div>
-                  <p className="text-slate-500 text-sm font-bold mb-2">Carregando PDF...</p>
-                  <div className="w-48 h-2 bg-slate-300 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-pmmg-blue transition-all duration-300" 
-                      style={{ width: `${downloadProgress}%` }}
-                    ></div>
-                  </div>
-                  <p className="text-slate-400 text-xs mt-2">{downloadProgress}%</p>
+                  <p className="text-slate-500 text-sm font-bold mb-2">Processando PDF...</p>
                 </div>
               }
             >
@@ -464,6 +493,18 @@ export default function PdfReader() {
                 />
               )}
             </Document>
+          ) : containerWidth > 0 && !pdfLoadError ? (
+            <div className="flex flex-col items-center justify-center py-12 w-full">
+              <div className="w-10 h-10 border-4 border-pmmg-blue/20 border-t-pmmg-blue rounded-full animate-spin mb-4"></div>
+              <p className="text-slate-500 text-sm font-bold mb-2">Baixando PDF...</p>
+              <div className="w-48 h-2 bg-slate-300 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-pmmg-blue transition-all duration-300" 
+                  style={{ width: `${downloadProgress}%` }}
+                ></div>
+              </div>
+              <p className="text-slate-400 text-xs mt-2">{downloadProgress}%</p>
+            </div>
           ) : null}
         </div>
       </main>

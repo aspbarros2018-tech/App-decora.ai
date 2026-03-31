@@ -65,6 +65,11 @@ async function startServer() {
       return res.status(400).send('Missing URL');
     }
 
+    // Decode URL if it's double encoded
+    if (url.includes('%3A%2F%2F')) {
+      url = decodeURIComponent(url);
+    }
+
     console.log(`[PDF Proxy] Solicitando URL: ${url}`);
 
     // PROTEÇÃO (SSRF): Bloqueia IPs internos e localhost
@@ -113,71 +118,111 @@ async function startServer() {
     try {
       console.log(`[PDF Proxy] Iniciando download do Supabase: ${url}`);
       
-      // Fazemos um fetch simples, sem repassar headers do cliente (como Range ou Accept-Encoding).
-      // Isso evita erros 400 do Supabase e garante que recebemos o arquivo completo.
-      // O fetch nativo do Node lida automaticamente com redirecionamentos (301/302).
+      // Tenta usar o SDK do Supabase se disponível (melhor para buckets privados)
+      if (supabaseAdmin && url.includes('/pdfs/')) {
+        try {
+          const urlObj = new URL(url);
+          const pathParts = urlObj.pathname.split('/pdfs/');
+          if (pathParts.length >= 2) {
+            const filePath = decodeURIComponent(pathParts[1]);
+            console.log(`[PDF Proxy] Usando SDK para download privado: ${filePath}`);
+            const { data, error } = await supabaseAdmin.storage.from('pdfs').download(filePath);
+            
+            if (!error && data) {
+              const arrayBuffer = await data.arrayBuffer();
+              const buffer = Buffer.from(arrayBuffer);
+              console.log(`[PDF Proxy] Download via SDK bem-sucedido. Tamanho: ${(buffer.length / 1024 / 1024).toFixed(2)} MB.`);
+              
+              res.status(200);
+              res.setHeader('Access-Control-Allow-Origin', '*');
+              res.setHeader('Content-Type', 'application/pdf');
+              res.setHeader('Content-Length', buffer.length.toString());
+              res.setHeader('Accept-Ranges', 'bytes');
+              res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Type, Accept-Ranges');
+              res.setHeader('Cache-Control', 'public, max-age=3600');
+              return res.send(buffer);
+            } else if (error) {
+              console.warn(`[PDF Proxy] Erro no download via SDK, tentando fetch direto:`, error.message);
+            }
+          }
+        } catch (sdkErr: any) {
+          console.warn(`[PDF Proxy] Falha ao tentar usar SDK: ${sdkErr.message}. Tentando fetch direto.`);
+        }
+      }
+
+      // Fazemos um fetch simples como fallback
       let response = await fetch(url);
       
       // Fallback 1: Fix hostname typo (tasypbhoytjdtbx -> fmwzmtasypbhoytjdtbx)
       if (!response.ok && url.includes('tasypbhoytjdtbx.supabase.co') && !url.includes('fmwzmtasypbhoytjdtbx')) {
         console.warn(`[PDF Proxy] Fallback 1: Corrigindo erro de digitação no hostname.`);
         const fallbackUrl = url.replace('tasypbhoytjdtbx.supabase.co', 'fmwzmtasypbhoytjdtbx.supabase.co');
-        response = await fetch(fallbackUrl);
-        if (response.ok) {
-           console.log(`[PDF Proxy] Fallback 1 bem-sucedido!`);
-           url = fallbackUrl;
-        }
+        try {
+          const fbResponse = await fetch(fallbackUrl);
+          if (fbResponse.ok) {
+             console.log(`[PDF Proxy] Fallback 1 bem-sucedido!`);
+             response = fbResponse;
+             url = fallbackUrl;
+          }
+        } catch (e) {}
       }
 
       // Fallback 2: Fix bucket typo (operacional -> pdfs)
       if (!response.ok && url.includes('/operacional/')) {
         console.warn(`[PDF Proxy] Fallback 2: Tentando buscar no bucket 'pdfs' em vez de 'operacional'.`);
         const fallbackUrl = url.replace('/operacional/', '/pdfs/');
-        response = await fetch(fallbackUrl);
-        if (response.ok) {
-           console.log(`[PDF Proxy] Fallback 2 bem-sucedido!`);
-           url = fallbackUrl;
-        }
+        try {
+          const fbResponse = await fetch(fallbackUrl);
+          if (fbResponse.ok) {
+             console.log(`[PDF Proxy] Fallback 2 bem-sucedido!`);
+             response = fbResponse;
+             url = fallbackUrl;
+          }
+        } catch (e) {}
       }
 
       // Fallback 3: Fix both typos
       if (!response.ok && url.includes('tasypbhoytjdtbx.supabase.co') && !url.includes('fmwzmtasypbhoytjdtbx') && url.includes('/operacional/')) {
         console.warn(`[PDF Proxy] Fallback 3: Corrigindo hostname e bucket.`);
         const fallbackUrl = url.replace('tasypbhoytjdtbx.supabase.co', 'fmwzmtasypbhoytjdtbx.supabase.co').replace('/operacional/', '/pdfs/');
-        response = await fetch(fallbackUrl);
-        if (response.ok) {
-           console.log(`[PDF Proxy] Fallback 3 bem-sucedido!`);
-           url = fallbackUrl;
-        }
+        try {
+          const fbResponse = await fetch(fallbackUrl);
+          if (fbResponse.ok) {
+             console.log(`[PDF Proxy] Fallback 3 bem-sucedido!`);
+             response = fbResponse;
+             url = fallbackUrl;
+          }
+        } catch (e) {}
       }
       
       if (!response.ok) {
         const errorText = await response.text().catch(() => '');
         console.error(`[PDF Proxy] Falha no fetch: ${response.status} ${response.statusText}. Body: ${errorText}`);
         res.setHeader('Access-Control-Allow-Origin', '*');
-        return res.status(response.status).send(`Failed to fetch PDF: ${response.status} ${response.statusText}`);
+        return res.status(response.status).send(`Erro ao buscar PDF no Supabase: ${response.status} ${response.statusText}. ${errorText.substring(0, 100)}`);
       }
       
       // Lemos o arquivo inteiro para a memória do servidor.
-      // Isso garante que o Content-Length enviado ao cliente seja 100% exato,
-      // evitando travamentos no react-pdf causados por descompressão automática ou streams corrompidos.
       const arrayBuffer = await response.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
       
-      console.log(`[PDF Proxy] Fetch success. Tamanho: ${(buffer.length / 1024 / 1024).toFixed(2)} MB`);
+      const remoteContentType = response.headers.get('content-type');
+      console.log(`[PDF Proxy] Fetch success. Tamanho: ${(buffer.length / 1024 / 1024).toFixed(2)} MB. Content-Type: ${remoteContentType}`);
       
       res.status(200);
       res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Content-Type', response.headers.get('content-type') || 'application/pdf');
+      res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Length', buffer.length.toString());
-      res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Type');
+      res.setHeader('Accept-Ranges', 'bytes');
+      res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Type, Accept-Ranges');
+      res.setHeader('Cache-Control', 'public, max-age=3600');
       
       // Enviamos o buffer completo para o cliente
       res.send(buffer);
-    } catch (error) {
+    } catch (error: any) {
       console.error('[PDF Proxy] Error proxying PDF:', error);
       res.setHeader('Access-Control-Allow-Origin', '*');
-      res.status(500).send('Error proxying PDF');
+      res.status(500).send(`Erro interno no proxy de PDF: ${error.message}`);
     }
   });
 
@@ -376,10 +421,19 @@ async function startServer() {
 
   // Use the PORT environment variable provided by Cloud Run
   const finalPort = process.env.PORT || port;
-  app.listen(Number(finalPort), '0.0.0.0', () => {
-    log(`Server listening at http://0.0.0.0:${finalPort}`);
-  });
+  
+  // Only start the listener if not running as a Vercel serverless function
+  if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+    app.listen(Number(finalPort), '0.0.0.0', () => {
+      log(`Server listening at http://0.0.0.0:${finalPort}`);
+    });
+  }
+  
+  return app;
 }
+
+// Export for Vercel
+export const appPromise = startServer();
 
 startServer().catch(err => {
   console.error('Failed to start server:', err);

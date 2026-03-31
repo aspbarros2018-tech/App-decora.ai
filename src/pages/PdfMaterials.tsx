@@ -106,24 +106,6 @@ export default function PdfMaterials() {
     return acc;
   }, {} as Record<string, Material[]>);
 
-  const handleDownload = async (url: string, title: string) => {
-    try {
-      const response = await fetch(url);
-      const blob = await response.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.download = `${title}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(downloadUrl);
-    } catch (error) {
-      console.error('Error downloading file:', error);
-      window.open(url, '_blank'); // Fallback to opening in new tab
-    }
-  };
-
   return (
     <div className="min-h-screen flex flex-col font-display bg-background-dark pb-20">
       <header className="sticky top-0 z-50 bg-pmmg-blue/95 backdrop-blur-md border-b border-white/10 px-5 py-4">
