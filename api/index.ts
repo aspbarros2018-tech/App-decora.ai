@@ -129,6 +129,11 @@ app.post('/api/create-asaas-payment', express.json(), async (req, res) => {
   const { plan, course, userId, email, name, cpf, paymentMethod } = req.body;
   const asaasApiKey = process.env.ASAAS_API_KEY;
   let asaasUrl = process.env.ASAAS_API_URL || 'https://api.asaas.com/v3';
+  
+  // Prevent using the API key as the URL if mistakenly set in the environment
+  if (asaasUrl.startsWith('$aact_')) {
+    asaasUrl = 'https://api.asaas.com/v3';
+  }
 
   if (!asaasApiKey) {
     return res.status(500).json({ error: 'ASAAS_API_KEY não configurada' });
