@@ -218,11 +218,14 @@ app.post('/api/asaas-webhook', express.json(), async (req, res) => {
 
 // Serve static files in production (Vercel)
 if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(distPath));
-  app.get('*', (req, res) => {
-    if (req.path.startsWith('/api')) return res.status(404).json({ error: 'Not found' });
-    res.sendFile(path.join(distPath, 'index.html'));
-  });
+  const publicPath = path.join(process.cwd(), 'dist');
+  if (fs.existsSync(publicPath)) {
+    app.use(express.static(publicPath));
+    app.get('*', (req, res) => {
+      if (req.path.startsWith('/api')) return res.status(404).json({ error: 'Not found' });
+      res.sendFile(path.join(publicPath, 'index.html'));
+    });
+  }
 }
 
 // Start listener if not on Vercel
