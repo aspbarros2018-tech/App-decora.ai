@@ -16,52 +16,57 @@ export default function Login() {
     setLoading(true);
     setError('');
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-    if (error) {
-      // Se for o admin e der erro (provavelmente porque não existe), tenta criar a conta automaticamente
-      if (email === 'aspbarros2018@gmail.com' && password === 'pelacao86') {
-        if (error.message.includes('Email not confirmed')) {
-          setError('Por favor, verifique sua caixa de entrada (aspbarros2018@gmail.com) e clique no link de confirmação antes de entrar.');
-          setLoading(false);
-          return;
+      if (error) {
+        // Se for o admin e der erro (provavelmente porque não existe), tenta criar a conta automaticamente
+        if (email === 'aspbarros2018@gmail.com' && password === 'pelacao86') {
+          if (error.message.includes('Email not confirmed')) {
+            setError('Por favor, verifique sua caixa de entrada (aspbarros2018@gmail.com) e clique no link de confirmação antes de entrar.');
+            setLoading(false);
+            return;
+          }
+
+          const { data, error: signUpError } = await supabase.auth.signUp({
+            email,
+            password,
+          });
+          
+          if (!signUpError) {
+            // Se a sessão for nula após o cadastro, significa que precisa confirmar o email
+            if (!data.session) {
+              setError('Conta de administrador criada! Por favor, verifique sua caixa de entrada (aspbarros2018@gmail.com) para confirmar o e-mail antes de entrar.');
+            } else {
+              navigate('/dashboard');
+            }
+            setLoading(false);
+            return;
+          } else {
+            // Se o erro for de rate limit, pode ser que a conta já exista mas o email não foi confirmado
+            if (signUpError.message.includes('security purposes')) {
+               setError('Aguarde alguns segundos e tente novamente, ou verifique se você recebeu um email de confirmação.');
+            } else if (signUpError.message.includes('User already registered')) {
+               setError('A conta já existe. Se você não consegue entrar, verifique seu email para confirmar a conta.');
+            } else {
+               setError(`Erro ao criar admin: ${signUpError.message}`);
+            }
+            setLoading(false);
+            return;
+          }
         }
 
-        const { data, error: signUpError } = await supabase.auth.signUp({
-          email,
-          password,
-        });
-        
-        if (!signUpError) {
-          // Se a sessão for nula após o cadastro, significa que precisa confirmar o email
-          if (!data.session) {
-            setError('Conta de administrador criada! Por favor, verifique sua caixa de entrada (aspbarros2018@gmail.com) para confirmar o e-mail antes de entrar.');
-          } else {
-            navigate('/dashboard');
-          }
-          setLoading(false);
-          return;
-        } else {
-          // Se o erro for de rate limit, pode ser que a conta já exista mas o email não foi confirmado
-          if (signUpError.message.includes('security purposes')) {
-             setError('Aguarde alguns segundos e tente novamente, ou verifique se você recebeu um email de confirmação.');
-          } else if (signUpError.message.includes('User already registered')) {
-             setError('A conta já existe. Se você não consegue entrar, verifique seu email para confirmar a conta.');
-          } else {
-             setError(`Erro ao criar admin: ${signUpError.message}`);
-          }
-          setLoading(false);
-          return;
-        }
+        setError(error.message === 'Invalid login credentials' ? 'Email ou senha incorretos.' : error.message);
+        setLoading(false);
+      } else {
+        navigate('/dashboard');
       }
-
-      setError(error.message === 'Invalid login credentials' ? 'Email ou senha incorretos.' : error.message);
+    } catch (err: any) {
+      setError(err.message || 'Erro inesperado ao tentar fazer login.');
       setLoading(false);
-    } else {
-      navigate('/dashboard');
     }
   };
 
