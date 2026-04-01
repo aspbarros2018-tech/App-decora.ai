@@ -230,19 +230,36 @@ if (process.env.NODE_ENV === 'production') {
 
 // Start listener if not on Vercel
 if (!process.env.VERCEL) {
-  // Serve static files in local development if dist exists
-  if (fs.existsSync(distPath)) {
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      if (req.path.startsWith('/api')) return res.status(404).json({ error: 'Not found' });
-      res.sendFile(path.join(distPath, 'index.html'));
+  if (process.env.NODE_ENV === 'production') {
+    // Serve static files in local production build
+    if (fs.existsSync(distPath)) {
+      app.use(express.static(distPath));
+      app.get('*', (req, res) => {
+        if (req.path.startsWith('/api')) return res.status(404).json({ error: 'Not found' });
+        res.sendFile(path.join(distPath, 'index.html'));
+      });
+    }
+    const port = process.env.PORT || 3000;
+    app.listen(Number(port), '0.0.0.0', () => {
+      log(`Server listening at http://0.0.0.0:${port}`);
+    });
+  } else {
+    // Development mode: use Vite middleware
+    import('vite').then(async (viteModule) => {
+      const vite = await viteModule.createServer({
+        server: { middlewareMode: true },
+        appType: 'spa',
+      });
+      app.use(vite.middlewares);
+      
+      const port = process.env.PORT || 3000;
+      app.listen(Number(port), '0.0.0.0', () => {
+        log(`Server listening at http://0.0.0.0:${port}`);
+      });
+    }).catch(err => {
+      console.error('Failed to start Vite:', err);
     });
   }
-
-  const port = process.env.PORT || 3000;
-  app.listen(port, () => {
-    log(`Server listening at http://localhost:${port}`);
-  });
 }
 
 export default app;
