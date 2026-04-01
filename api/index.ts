@@ -127,7 +127,8 @@ app.get('/api/proxy-pdf', async (req, res) => {
 // Asaas Payment Creation
 app.post('/api/create-asaas-payment', express.json(), async (req, res) => {
   const { plan, course, userId, email, name, cpf, paymentMethod } = req.body;
-  const asaasApiKey = process.env.ASAAS_API_KEY;
+  // Use provided key as fallback if env var is missing
+  const asaasApiKey = process.env.ASAAS_API_KEY || '$aact_prod_000MzkwODA2MWY2OGM3MWRlMDU2NWM3MzJlNzZmNGZhZGY6OjlmMjVkY2I2LWQ4OTgtNDFiOC1iMzRlLTVhNjNmNjMyYmFlYzo6JGFhY2hfODU0OGVkYTgtY2M5ZC00Mjg4LTg4YTktMWYxNWE4YTA2YjZm';
   let asaasUrl = process.env.ASAAS_API_URL || 'https://api.asaas.com/v3';
   
   // Prevent using the API key as the URL if mistakenly set in the environment
@@ -200,7 +201,7 @@ app.post('/api/create-asaas-payment', express.json(), async (req, res) => {
 
 // Asaas Webhook
 app.post('/api/asaas-webhook', express.json(), async (req, res) => {
-  const expectedToken = process.env.ASAAS_API_KEY;
+  const expectedToken = process.env.ASAAS_API_KEY || '$aact_prod_000MzkwODA2MWY2OGM3MWRlMDU2NWM3MzJlNzZmNGZhZGY6OjlmMjVkY2I2LWQ4OTgtNDFiOC1iMzRlLTVhNjNmNjMyYmFlYzo6JGFhY2hfODU0OGVkYTgtY2M5ZC00Mjg4LTg4YTktMWYxNWE4YTA2YjZm';
   const receivedToken = req.headers['asaas-access-token'];
 
   if (!expectedToken || receivedToken !== expectedToken) {
