@@ -149,8 +149,9 @@ app.post('/api/create-asaas-payment', express.json(), async (req, res) => {
   try {
     let customerId = '';
     let searchUrl = `${asaasUrl}/customers?email=${encodeURIComponent(email)}`;
-    if (cpf) {
-      const cleanCpf = cpf.replace(/\D/g, '');
+    const cleanCpf = cpf ? cpf.replace(/\D/g, '') : '';
+    
+    if (cleanCpf) {
       searchUrl = `${asaasUrl}/customers?cpfCnpj=${cleanCpf}`;
     }
 
@@ -165,7 +166,7 @@ app.post('/api/create-asaas-payment', express.json(), async (req, res) => {
       const newCustomerResponse = await fetch(`${asaasUrl}/customers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'access_token': asaasApiKey },
-        body: JSON.stringify({ name: name || email, email, cpfCnpj: cpf || '' })
+        body: JSON.stringify({ name: name || email, email, cpfCnpj: cleanCpf })
       });
       const newCustomer = await newCustomerResponse.json();
       if (newCustomer.errors) throw new Error(newCustomer.errors[0].description);

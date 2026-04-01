@@ -3,25 +3,77 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import Logo from '../components/Logo';
 import { supabase } from '../lib/supabase';
 
+function isValidCPF(cpf: string) {
+  cpf = cpf.replace(/[^\d]+/g, '');
+  if (cpf.length !== 11 || !!cpf.match(/(\d)\1{10}/)) return false;
+  
+  let sum = 0;
+  let remainder;
+  
+  for (let i = 1; i <= 9; i++) {
+    sum = sum + parseInt(cpf.substring(i - 1, i)) * (11 - i);
+  }
+  remainder = (sum * 10) % 11;
+  if ((remainder === 10) || (remainder === 11)) remainder = 0;
+  if (remainder !== parseInt(cpf.substring(9, 10))) return false;
+  
+  sum = 0;
+  for (let i = 1; i <= 10; i++) {
+    sum = sum + parseInt(cpf.substring(i - 1, i)) * (12 - i);
+  }
+  remainder = (sum * 10) % 11;
+  if ((remainder === 10) || (remainder === 11)) remainder = 0;
+  if (remainder !== parseInt(cpf.substring(10, 11))) return false;
+  
+  return true;
+}
+
 function CheckoutForm({ 
   plan, 
   course, 
   isCouponValid, 
   selectedPayment, 
+  cpf,
+  setCpf,
   onSuccess 
 }: { 
   plan: string, 
   course: string, 
   isCouponValid: boolean, 
   selectedPayment: string,
+  cpf: string,
+  setCpf: (cpf: string) => void,
   onSuccess: () => void
 }) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const handleCpfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let value = e.target.value.replace(/\D/g, '');
+    let formattedValue = value;
+    
+    if (value.length <= 11) {
+      if (value.length <= 3) {
+        formattedValue = value;
+      } else if (value.length <= 6) {
+        formattedValue = `${value.slice(0, 3)}.${value.slice(3)}`;
+      } else if (value.length <= 9) {
+        formattedValue = `${value.slice(0, 3)}.${value.slice(3, 6)}.${value.slice(6)}`;
+      } else {
+        formattedValue = `${value.slice(0, 3)}.${value.slice(3, 6)}.${value.slice(6, 9)}-${value.slice(9)}`;
+      }
+    }
+    setCpf(formattedValue);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isProcessing) return;
+    
+    if (!isCouponValid && !isValidCPF(cpf)) {
+      setError('Por favor, informe um CPF válido para prosseguir com o pagamento.');
+      return;
+    }
     
     setIsProcessing(true);
     setError(null);
@@ -33,10 +85,17 @@ function CheckoutForm({
         throw new Error('Usuário não autenticado. Por favor, faça login novamente.');
       }
 
+      // Update CPF in metadata if it changed
+      const metadata = user.user_metadata || {};
+      if (cpf && cpf !== metadata.cpf) {
+        await supabase.auth.updateUser({
+          data: { cpf }
+        });
+      }
+
       // 1. Se for cupom, ativa direto
       if (isCouponValid) {
         const now = new Date().toISOString();
-        const metadata = user.user_metadata || {};
         const { error: upsertError } = await supabase
           .from('profiles')
           .upsert({ 
@@ -44,7 +103,7 @@ function CheckoutForm({
             course,
             plan: '1month',
             full_name: metadata.full_name || '',
-            cpf: metadata.cpf || '',
+            cpf: cpf || metadata.cpf || '',
             phone: metadata.phone || '',
             updated_at: now,
             created_at: now
@@ -55,7 +114,6 @@ function CheckoutForm({
       }
 
       // 2. Asaas Payment (PIX ou Cartão)
-      const metadata = user.user_metadata || {};
       const response = await fetch('/api/create-asaas-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -65,7 +123,7 @@ function CheckoutForm({
           userId: user.id, 
           email: user.email,
           name: metadata.full_name || '',
-          cpf: metadata.cpf || '',
+          cpf: cpf || metadata.cpf || '',
           paymentMethod: selectedPayment
         }),
       });
@@ -104,6 +162,27 @@ function CheckoutForm({
         </div>
       )}
 
+      {!isCouponValid && (
+        <div className="bg-white/5 border border-white/10 p-4 rounded-xl shadow-lg mb-2">
+          <label className="flex flex-col gap-1.5">
+            <span className="text-white/60 text-xs font-bold ml-1 uppercase tracking-wide">Confirme seu CPF para emissão da nota</span>
+            <input 
+              name="cpf" 
+              value={cpf} 
+              onChange={handleCpfChange} 
+              className={`w-full rounded-xl text-white focus:ring-2 focus:ring-pmmg-gold/50 border ${!cpf ? 'border-white/10' : isValidCPF(cpf) ? 'border-green-500/50' : 'border-red-500/50'} bg-black/40 focus:border-pmmg-gold h-12 px-4 text-sm placeholder:text-slate-600 transition-all outline-none`} 
+              placeholder="000.000.000-00" 
+              type="text" 
+              maxLength={14} 
+              required 
+            />
+            {cpf && !isValidCPF(cpf) && (
+              <span className="text-red-400 text-[10px] ml-1 mt-1 font-bold">CPF inválido. Verifique os números digitados.</span>
+            )}
+          </label>
+        </div>
+      )}
+
       <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-background-dark via-background-dark/95 to-transparent z-40 max-w-[480px] mx-auto pb-safe">
         <button 
           type="submit" 
@@ -139,6 +218,17 @@ export default function CheckoutStep4() {
   const [selectedPayment, setSelectedPayment] = useState('pix');
   const [coupon, setCoupon] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
+  const [cpf, setCpf] = useState('');
+
+  useEffect(() => {
+    async function loadUserCpf() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.user_metadata?.cpf) {
+        setCpf(user.user_metadata.cpf);
+      }
+    }
+    loadUserCpf();
+  }, []);
 
   const isCouponValid = coupon.toLowerCase() === 'padrão';
   const originalPrice = plan === '1month' ? 29.90 : plan === '2months' ? 49.90 : 69.90;
@@ -297,6 +387,8 @@ export default function CheckoutStep4() {
             course={course}
             isCouponValid={isCouponValid}
             selectedPayment={selectedPayment}
+            cpf={cpf}
+            setCpf={setCpf}
             onSuccess={() => setIsSuccess(true)}
           />
         </div>
