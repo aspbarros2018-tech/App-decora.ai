@@ -222,16 +222,48 @@ export default function PdfReader() {
         setDownloadProgress(0);
         setPdfLoadError(null);
         
-        const proxyUrl = `/api/proxy-pdf?url=${encodeURIComponent(state.pdfUrl)}`;
-        const response = await fetch(proxyUrl);
-        
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(errorText || `Erro ${response.status}: Falha ao baixar o arquivo.`);
+        let blob: Blob;
+
+        try {
+          // 1. Tenta baixar usando o cliente do Supabase se for uma URL do Supabase
+          // Isso ignora completamente o limite de 4.5MB da Vercel e usa a autenticação do usuário
+          if (state.pdfUrl.includes('/storage/v1/object/')) {
+            const urlObj = new URL(state.pdfUrl);
+            const pathParts = urlObj.pathname.split('/object/');
+            
+            if (pathParts.length === 2) {
+              const typeAndPath = pathParts[1]; // ex: "public/pdfs/arquivo.pdf"
+              const parts = typeAndPath.split('/');
+              const bucket = parts[1]; // "pdfs"
+              const filePath = decodeURIComponent(parts.slice(2).join('/'));
+              
+              console.log(`Baixando diretamente do Supabase: Bucket=${bucket}, Path=${filePath}`);
+              const { data, error } = await supabase.storage.from(bucket).download(filePath);
+              
+              if (error) throw error;
+              if (!data) throw new Error('Arquivo vazio retornado pelo Supabase');
+              blob = data;
+            } else {
+              throw new Error('URL do Supabase mal formatada');
+            }
+          } else {
+            // 2. Tenta fetch direto para outras URLs
+            const response = await fetch(state.pdfUrl);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            blob = await response.blob();
+          }
+        } catch (err) {
+          console.log('Download direto falhou, tentando via proxy da Vercel...', err);
+          // 3. Fallback para o proxy (pode falhar em arquivos > 4.5MB na Vercel)
+          const proxyUrl = `/api/proxy-pdf?url=${encodeURIComponent(state.pdfUrl)}`;
+          const response = await fetch(proxyUrl);
+          
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(errorText || `Erro ${response.status}: Falha ao baixar o arquivo.`);
+          }
+          blob = await response.blob();
         }
-        
-        // Simple blob fetch instead of reader for better compatibility
-        const blob = await response.blob();
         if (!active) return;
 
         const url = URL.createObjectURL(blob);

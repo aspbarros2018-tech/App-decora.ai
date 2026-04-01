@@ -129,25 +129,9 @@ app.get('/api/proxy-pdf', async (req, res) => {
 app.post('/api/create-asaas-payment', express.json(), async (req, res) => {
   const { plan, course, userId, email, name, cpf, paymentMethod } = req.body;
   
-  let asaasApiKey = process.env.ASAAS_API_KEY || '';
-  let asaasUrl = process.env.ASAAS_API_URL || 'https://api.asaas.com/v3';
-  
-  // Fix inverted environment variables (if URL was put in KEY and KEY in URL)
-  if (asaasApiKey.startsWith('http')) {
-    const temp = asaasApiKey;
-    asaasApiKey = asaasUrl;
-    asaasUrl = temp;
-  }
-
-  // Force correct URL if it's still wrong
-  if (asaasUrl.startsWith('$aact_') || !asaasUrl.startsWith('http')) {
-    asaasUrl = 'https://api.asaas.com/v3';
-  }
-  
-  // Force correct API Key if it's missing or wrong
-  if (!asaasApiKey.startsWith('$aact_')) {
-    asaasApiKey = '$aact_prod_000MzkwODA2MWY2OGM3MWRlMDU2NWM3MzJlNzZmNGZhZGY6OjlmMjVkY2I2LWQ4OTgtNDFiOC1iMzRlLTVhNjNmNjMyYmFlYzo6JGFhY2hfODU0OGVkYTgtY2M5ZC00Mjg4LTg4YTktMWYxNWE4YTA2YjZm';
-  }
+  // Forçando a chave nova que o usuário enviou, ignorando a da Vercel que pode estar revogada/inválida
+  const asaasApiKey = '$aact_prod_000MzkwODA2MWY2OGM3MWRlMDU2NWM3MzJlNzZmNGZhZGY6OjlmMjVkY2I2LWQ4OTgtNDFiOC1iMzRlLTVhNjNmNjMyYmFlYzo6JGFhY2hfODU0OGVkYTgtY2M5ZC00Mjg4LTg4YTktMWYxNWE4YTA2YjZm';
+  const asaasUrl = 'https://api.asaas.com/v3';
 
   if (!asaasApiKey) {
     return res.status(500).json({ error: 'ASAAS_API_KEY não configurada' });
@@ -214,10 +198,7 @@ app.post('/api/create-asaas-payment', express.json(), async (req, res) => {
 
 // Asaas Webhook
 app.post('/api/asaas-webhook', express.json(), async (req, res) => {
-  let expectedToken = process.env.ASAAS_API_KEY || '';
-  if (!expectedToken.startsWith('$aact_')) {
-    expectedToken = '$aact_prod_000MzkwODA2MWY2OGM3MWRlMDU2NWM3MzJlNzZmNGZhZGY6OjlmMjVkY2I2LWQ4OTgtNDFiOC1iMzRlLTVhNjNmNjMyYmFlYzo6JGFhY2hfODU0OGVkYTgtY2M5ZC00Mjg4LTg4YTktMWYxNWE4YTA2YjZm';
-  }
+  const expectedToken = '$aact_prod_000MzkwODA2MWY2OGM3MWRlMDU2NWM3MzJlNzZmNGZhZGY6OjlmMjVkY2I2LWQ4OTgtNDFiOC1iMzRlLTVhNjNmNjMyYmFlYzo6JGFhY2hfODU0OGVkYTgtY2M5ZC00Mjg4LTg4YTktMWYxNWE4YTA2YjZm';
   const receivedToken = req.headers['asaas-access-token'];
 
   if (!expectedToken || receivedToken !== expectedToken) {
