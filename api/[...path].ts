@@ -109,7 +109,8 @@ app.get('/api/proxy-pdf', async (req, res) => {
 
     let response = await fetch(url);
     if (!response.ok) {
-      return res.status(response.status).send(`Erro ao buscar PDF`);
+      const errorText = await response.text();
+      return res.status(response.status).send(`Erro ao buscar PDF: HTTP ${response.status} - ${errorText.substring(0, 100)}`);
     }
     
     const arrayBuffer = await response.arrayBuffer();
@@ -127,13 +128,25 @@ app.get('/api/proxy-pdf', async (req, res) => {
 // Asaas Payment Creation
 app.post('/api/create-asaas-payment', express.json(), async (req, res) => {
   const { plan, course, userId, email, name, cpf, paymentMethod } = req.body;
-  // Use provided key as fallback if env var is missing
-  const asaasApiKey = process.env.ASAAS_API_KEY || '$aact_prod_000MzkwODA2MWY2OGM3MWRlMDU2NWM3MzJlNzZmNGZhZGY6OjlmMjVkY2I2LWQ4OTgtNDFiOC1iMzRlLTVhNjNmNjMyYmFlYzo6JGFhY2hfODU0OGVkYTgtY2M5ZC00Mjg4LTg4YTktMWYxNWE4YTA2YjZm';
+  
+  let asaasApiKey = process.env.ASAAS_API_KEY || '';
   let asaasUrl = process.env.ASAAS_API_URL || 'https://api.asaas.com/v3';
   
-  // Prevent using the API key as the URL if mistakenly set in the environment
-  if (asaasUrl.startsWith('$aact_')) {
+  // Fix inverted environment variables (if URL was put in KEY and KEY in URL)
+  if (asaasApiKey.startsWith('http')) {
+    const temp = asaasApiKey;
+    asaasApiKey = asaasUrl;
+    asaasUrl = temp;
+  }
+
+  // Force correct URL if it's still wrong
+  if (asaasUrl.startsWith('$aact_') || !asaasUrl.startsWith('http')) {
     asaasUrl = 'https://api.asaas.com/v3';
+  }
+  
+  // Force correct API Key if it's missing or wrong
+  if (!asaasApiKey.startsWith('$aact_')) {
+    asaasApiKey = '$aact_prod_000MzkwODA2MWY2OGM3MWRlMDU2NWM3MzJlNzZmNGZhZGY6OjlmMjVkY2I2LWQ4OTgtNDFiOC1iMzRlLTVhNjNmNjMyYmFlYzo6JGFhY2hfODU0OGVkYTgtY2M5ZC00Mjg4LTg4YTktMWYxNWE4YTA2YjZm';
   }
 
   if (!asaasApiKey) {
@@ -201,7 +214,10 @@ app.post('/api/create-asaas-payment', express.json(), async (req, res) => {
 
 // Asaas Webhook
 app.post('/api/asaas-webhook', express.json(), async (req, res) => {
-  const expectedToken = process.env.ASAAS_API_KEY || '$aact_prod_000MzkwODA2MWY2OGM3MWRlMDU2NWM3MzJlNzZmNGZhZGY6OjlmMjVkY2I2LWQ4OTgtNDFiOC1iMzRlLTVhNjNmNjMyYmFlYzo6JGFhY2hfODU0OGVkYTgtY2M5ZC00Mjg4LTg4YTktMWYxNWE4YTA2YjZm';
+  let expectedToken = process.env.ASAAS_API_KEY || '';
+  if (!expectedToken.startsWith('$aact_')) {
+    expectedToken = '$aact_prod_000MzkwODA2MWY2OGM3MWRlMDU2NWM3MzJlNzZmNGZhZGY6OjlmMjVkY2I2LWQ4OTgtNDFiOC1iMzRlLTVhNjNmNjMyYmFlYzo6JGFhY2hfODU0OGVkYTgtY2M5ZC00Mjg4LTg4YTktMWYxNWE4YTA2YjZm';
+  }
   const receivedToken = req.headers['asaas-access-token'];
 
   if (!expectedToken || receivedToken !== expectedToken) {

@@ -4,8 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx api/index.ts",
-    "build": "vite build && esbuild api/index.ts --bundle --platform=node --outfile=dist/server.cjs --format=cjs --packages=external",
+    "dev": "tsx api/\\[...path\\].ts",
+    "build": "vite build && esbuild api/\\[...path\\].ts --bundle --platform=node --outfile=dist/server.cjs --format=cjs --packages=external",
     "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist",
