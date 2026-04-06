@@ -31,7 +31,7 @@ function isValidCPF(cpf: string) {
 function CheckoutForm({ 
   plan, 
   course, 
-  isCouponValid, 
+  appliedCoupon, 
   selectedPayment, 
   cpf,
   setCpf,
@@ -39,7 +39,7 @@ function CheckoutForm({
 }: { 
   plan: string, 
   course: string, 
-  isCouponValid: boolean, 
+  appliedCoupon: string | null, 
   selectedPayment: string,
   cpf: string,
   setCpf: (cpf: string) => void,
@@ -70,7 +70,7 @@ function CheckoutForm({
     e.preventDefault();
     if (isProcessing) return;
     
-    if (!isCouponValid && !isValidCPF(cpf)) {
+    if (!appliedCoupon && !isValidCPF(cpf)) {
       setError('Por favor, informe um CPF válido para prosseguir com o pagamento.');
       return;
     }
@@ -94,14 +94,16 @@ function CheckoutForm({
       }
 
       // 1. Se for cupom, ativa direto
-      if (isCouponValid) {
+      if (appliedCoupon) {
         const now = new Date().toISOString();
+        const planToSave = appliedCoupon === 'testando' ? '5days' : '1month';
+        
         const { error: upsertError } = await supabase
           .from('profiles')
           .upsert({ 
             id: user.id,
             course,
-            plan: '1month',
+            plan: planToSave,
             full_name: metadata.full_name || '',
             cpf: cpf || metadata.cpf || '',
             phone: metadata.phone || '',
@@ -162,7 +164,7 @@ function CheckoutForm({
         </div>
       )}
 
-      {!isCouponValid && (
+      {!appliedCoupon && (
         <div className="bg-white/5 border border-white/10 p-4 rounded-xl shadow-lg mb-2">
           <label className="flex flex-col gap-1.5">
             <span className="text-white/60 text-xs font-bold ml-1 uppercase tracking-wide">Confirme seu CPF para emissão da nota</span>
@@ -196,9 +198,9 @@ function CheckoutForm({
             </>
           ) : (
             <>
-              <span className="material-symbols-outlined">{isCouponValid ? 'verified' : (selectedPayment === 'pix' ? 'qr_code' : 'lock')}</span>
+              <span className="material-symbols-outlined">{appliedCoupon ? 'verified' : (selectedPayment === 'pix' ? 'qr_code' : 'lock')}</span>
               <span>
-                {isCouponValid 
+                {appliedCoupon 
                   ? 'Ativar Acesso Grátis' 
                   : (selectedPayment === 'pix' ? 'Gerar PIX' : 'Pagar com Cartão')}
               </span>
@@ -230,9 +232,9 @@ export default function CheckoutStep4() {
     loadUserCpf();
   }, []);
 
-  const isCouponValid = coupon.toLowerCase() === 'padrão';
+  const appliedCoupon = coupon.toLowerCase() === 'padrão' ? 'padrão' : coupon.toLowerCase() === 'testando' ? 'testando' : null;
   const originalPrice = plan === '1month' ? 29.90 : plan === '2months' ? 49.90 : 69.90;
-  const finalPrice = isCouponValid ? 0 : originalPrice;
+  const finalPrice = appliedCoupon ? 0 : originalPrice;
 
   // Handle automatic redirection
   useEffect(() => {
@@ -255,10 +257,12 @@ export default function CheckoutStep4() {
           </div>
           
           <h2 className="text-white text-2xl font-bold mb-3 tracking-tight">
-            {isCouponValid ? 'Cupom Aplicado!' : 'Assinatura Ativada!'}
+            {appliedCoupon ? 'Cupom Aplicado!' : 'Assinatura Ativada!'}
           </h2>
           <p className="text-slate-400 text-sm mb-8 leading-relaxed">
-            {isCouponValid 
+            {appliedCoupon === 'testando'
+              ? 'Seu acesso gratuito de teste por 5 dias foi liberado com sucesso. Aproveite!'
+              : appliedCoupon === 'padrão'
               ? 'Seu acesso gratuito por 1 mês foi liberado com sucesso. Aproveite seus estudos!' 
               : 'Parabéns! Sua matrícula foi confirmada. Você já pode acessar todo o conteúdo exclusivo.'}
           </p>
@@ -316,12 +320,12 @@ export default function CheckoutStep4() {
             <span className="text-slate-300 text-sm">
               Plano {plan === '1month' ? '1 Mês' : plan === '2months' ? '2 Meses' : '4 Meses'} ({course === '3sgt' ? 'EAP 3º Sgt PM' : course === '1sgt' ? 'EAP 1º Sgt PM' : 'EAP 1º Ten PM'})
             </span>
-            <span className={isCouponValid ? "text-slate-500 line-through text-xs" : "text-white font-bold"}>R$ {originalPrice.toFixed(2).replace('.', ',')}</span>
+            <span className={appliedCoupon ? "text-slate-500 line-through text-xs" : "text-white font-bold"}>R$ {originalPrice.toFixed(2).replace('.', ',')}</span>
           </div>
           
-          {isCouponValid && (
+          {appliedCoupon && (
             <div className="flex justify-between items-center mb-2 text-green-400">
-              <span className="text-sm">Cupom "padrão" aplicado (1 Mês Grátis)</span>
+              <span className="text-sm">Cupom "{appliedCoupon}" aplicado ({appliedCoupon === 'testando' ? '5 Dias' : '1 Mês'} Grátis)</span>
               <span className="font-bold">- R$ {originalPrice.toFixed(2).replace('.', ',')}</span>
             </div>
           )}
@@ -342,7 +346,7 @@ export default function CheckoutStep4() {
               placeholder="Digite seu cupom"
               className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white placeholder:text-slate-600 focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all outline-none"
             />
-            {isCouponValid && (
+            {appliedCoupon && (
               <span className="absolute right-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-green-500">check_circle</span>
             )}
           </div>
@@ -385,7 +389,7 @@ export default function CheckoutStep4() {
           <CheckoutForm 
             plan={plan}
             course={course}
-            isCouponValid={isCouponValid}
+            appliedCoupon={appliedCoupon}
             selectedPayment={selectedPayment}
             cpf={cpf}
             setCpf={setCpf}

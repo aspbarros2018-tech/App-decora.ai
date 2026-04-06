@@ -86,6 +86,7 @@ export default function Dashboard() {
         // Calculate remaining days
         if (userPlan && createdAt) {
           const planDays: Record<string, number> = {
+            '5days': 5,
             '1month': 30,
             '2months': 60,
             '4months': 120,

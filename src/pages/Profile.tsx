@@ -44,6 +44,7 @@ export default function Profile() {
   };
 
   const PLAN_NAMES: Record<string, string> = {
+    '5days': 'Acesso Gratuito (5 Dias)',
     '1month': 'Mensal',
     '2months': 'Bimestral',
     '4months': 'Quadrimestral',

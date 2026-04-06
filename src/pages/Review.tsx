@@ -67,6 +67,7 @@ export default function Review() {
             // Check plan expiration
             if (!isUserAdmin && profile.plan && profile.created_at) {
               const planDays: Record<string, number> = {
+                '5days': 5,
                 '1month': 30,
                 '2months': 60,
                 '4months': 120,
