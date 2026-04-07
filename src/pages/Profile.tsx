@@ -27,6 +27,8 @@ export default function Profile() {
   });
   const [isSaving, setIsSaving] = useState(false);
   const [helpMessage, setHelpMessage] = useState('');
+  const [helpEmail, setHelpEmail] = useState('');
+  const [helpLoading, setHelpLoading] = useState(false);
   const [passwordData, setPasswordData] = useState({
     current: '',
     new: '',
@@ -79,6 +81,7 @@ export default function Profile() {
           created_at: data.created_at || '',
           avatar_url: data.avatar_url || ''
         });
+        setHelpEmail(user.email || '');
         setEditData({
           full_name: data.full_name || 'Usuário',
           avatar_url: data.avatar_url || ''
@@ -285,6 +288,16 @@ export default function Profile() {
               Descreva o problema que você está enfrentando. Sua mensagem será enviada diretamente para nossa equipe de suporte.
             </p>
             <div>
+              <label className="block text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">E-mail para Contato</label>
+              <input 
+                type="email"
+                className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary transition-colors mb-4"
+                placeholder="Seu melhor e-mail"
+                value={helpEmail}
+                onChange={(e) => setHelpEmail(e.target.value)}
+              />
+            </div>
+            <div>
               <label className="block text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">Mensagem</label>
               <textarea 
                 className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary transition-colors min-h-[150px] resize-none"
@@ -294,18 +307,49 @@ export default function Profile() {
               ></textarea>
             </div>
             <button 
-              className="w-full bg-primary text-black font-bold py-3 rounded-xl hover:bg-primary/90 transition-colors mt-4 flex items-center justify-center gap-2"
-              onClick={() => {
-                if (helpMessage.trim()) {
-                  setActiveView('mensagem_enviada');
-                  setHelpMessage('');
-                } else {
+              className="w-full bg-primary text-black font-bold py-3 rounded-xl hover:bg-primary/90 transition-colors mt-4 flex items-center justify-center gap-2 disabled:opacity-50"
+              disabled={helpLoading}
+              onClick={async () => {
+                if (!helpEmail.trim()) {
+                  alert('Por favor, informe um e-mail para contato.');
+                  return;
+                }
+                if (!helpMessage.trim()) {
                   alert('Por favor, digite uma mensagem.');
+                  return;
+                }
+
+                setHelpLoading(true);
+                try {
+                  const response = await fetch("https://formsubmit.co/ajax/aspbarros2018@gmail.com", {
+                    method: "POST",
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name: profile?.full_name || 'Usuário',
+                        email: helpEmail,
+                        message: helpMessage,
+                        _subject: "Suporte Técnico - EAP PM"
+                    })
+                  });
+
+                  if (response.ok) {
+                    setActiveView('mensagem_enviada');
+                    setHelpMessage('');
+                  } else {
+                    alert("Erro ao enviar mensagem. Tente novamente mais tarde.");
+                  }
+                } catch (error) {
+                  alert("Erro ao enviar mensagem. Verifique sua conexão.");
+                } finally {
+                  setHelpLoading(false);
                 }
               }}
             >
               <span className="material-symbols-outlined">send</span>
-              Enviar Mensagem
+              {helpLoading ? 'Enviando...' : 'Enviar Mensagem'}
             </button>
           </div>
         </div>

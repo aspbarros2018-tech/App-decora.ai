@@ -14,15 +14,34 @@ export default function Contact() {
     e.preventDefault();
     setLoading(true);
     
-    // Simulate sending message
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    setSuccess(true);
-    setLoading(false);
-    
-    setTimeout(() => {
-      navigate(-1);
-    }, 2000);
+    try {
+      const response = await fetch("https://formsubmit.co/ajax/aspbarros2018@gmail.com", {
+        method: "POST",
+        headers: { 
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+            name: name,
+            email: email,
+            message: message,
+            _subject: "Novo Contato - EAP PM"
+        })
+      });
+
+      if (response.ok) {
+        setSuccess(true);
+        setTimeout(() => {
+          navigate(-1);
+        }, 2000);
+      } else {
+        alert("Erro ao enviar mensagem. Tente novamente mais tarde.");
+      }
+    } catch (error) {
+      alert("Erro ao enviar mensagem. Verifique sua conexão.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
