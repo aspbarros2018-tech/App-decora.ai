@@ -225,32 +225,48 @@ export default function PdfReader() {
         let blob: Blob;
 
         try {
-          // 1. Tenta baixar usando o cliente do Supabase se for uma URL do Supabase
-          // Isso ignora completamente o limite de 4.5MB da Vercel e usa a autenticação do usuário
-          if (state.pdfUrl.includes('/storage/v1/object/')) {
-            const urlObj = new URL(state.pdfUrl);
-            const pathParts = urlObj.pathname.split('/object/');
-            
-            if (pathParts.length === 2) {
-              const typeAndPath = pathParts[1]; // ex: "public/pdfs/arquivo.pdf"
-              const parts = typeAndPath.split('/');
-              const bucket = parts[1]; // "pdfs"
-              const filePath = decodeURIComponent(parts.slice(2).join('/'));
-              
-              console.log(`Baixando diretamente do Supabase: Bucket=${bucket}, Path=${filePath}`);
-              const { data, error } = await supabase.storage.from(bucket).download(filePath);
-              
-              if (error) throw error;
-              if (!data) throw new Error('Arquivo vazio retornado pelo Supabase');
-              blob = data;
-            } else {
-              throw new Error('URL do Supabase mal formatada');
-            }
+          // Check cache first
+          const cacheName = 'pdf-cache-v1';
+          const cache = await caches.open(cacheName);
+          const cachedResponse = await cache.match(state.pdfUrl);
+
+          if (cachedResponse) {
+            console.log('Carregando PDF do cache local...');
+            blob = await cachedResponse.blob();
           } else {
-            // 2. Tenta fetch direto para outras URLs
-            const response = await fetch(state.pdfUrl);
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            blob = await response.blob();
+            // 1. Tenta baixar usando o cliente do Supabase se for uma URL do Supabase
+            // Isso ignora completamente o limite de 4.5MB da Vercel e usa a autenticação do usuário
+            if (state.pdfUrl.includes('/storage/v1/object/')) {
+              const urlObj = new URL(state.pdfUrl);
+              const pathParts = urlObj.pathname.split('/object/');
+              
+              if (pathParts.length === 2) {
+                const typeAndPath = pathParts[1]; // ex: "public/pdfs/arquivo.pdf"
+                const parts = typeAndPath.split('/');
+                const bucket = parts[1]; // "pdfs"
+                const filePath = decodeURIComponent(parts.slice(2).join('/'));
+                
+                console.log(`Baixando diretamente do Supabase: Bucket=${bucket}, Path=${filePath}`);
+                const { data, error } = await supabase.storage.from(bucket).download(filePath);
+                
+                if (error) throw error;
+                if (!data) throw new Error('Arquivo vazio retornado pelo Supabase');
+                blob = data;
+              } else {
+                throw new Error('URL do Supabase mal formatada');
+              }
+            } else {
+              // 2. Tenta fetch direto para outras URLs
+              const response = await fetch(state.pdfUrl);
+              if (!response.ok) throw new Error(`HTTP ${response.status}`);
+              blob = await response.blob();
+            }
+
+            // Save to cache
+            if (blob) {
+              const responseToCache = new Response(blob);
+              await cache.put(state.pdfUrl, responseToCache);
+            }
           }
         } catch (err) {
           console.log('Download direto falhou, tentando via proxy da Vercel...', err);
@@ -263,6 +279,14 @@ export default function PdfReader() {
             throw new Error(errorText || `Erro ${response.status}: Falha ao baixar o arquivo.`);
           }
           blob = await response.blob();
+          
+          // Save to cache
+          if (blob) {
+            const cacheName = 'pdf-cache-v1';
+            const cache = await caches.open(cacheName);
+            const responseToCache = new Response(blob);
+            await cache.put(state.pdfUrl, responseToCache);
+          }
         }
         if (!active) return;
 
